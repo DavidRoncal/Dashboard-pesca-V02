@@ -287,37 +287,6 @@ try:
                 st.markdown("---")
 
                 # =======================================================
-                # TIMELINE SCATTER (REVERTIDO A PLOTLY)
-                # =======================================================
-                st.subheader("⏰ Actividad en Tiempo Real")
-                fig_timeline = px.scatter(
-                    df_filtrado.sort_values("Marca temporal"),
-                    x="Marca temporal",
-                    y="Cuadrilla",
-                    color="Producto",
-                    hover_data=["Lote", "Bandejas", "Kilos Calc", "N° de Coche"],
-                    color_discrete_sequence=px.colors.qualitative.Bold,
-                    height=450
-                )
-                fig_timeline.update_traces(marker=dict(size=12, line=dict(width=1, color='DarkSlateGrey')))
-                fig_timeline.update_xaxes(tickformat="%H:%M", title_text="<b>Hora del Día</b>")
-                
-                # REQUISITO: Etiquetas de cuadrillas verticales y ajustadas
-                fig_timeline.update_yaxes(
-                    title_text="<b>Cuadrilla</b>", 
-                    tickangle=-90,  # Rotación vertical
-                    automargin=True # Ajuste automático para que no se corten
-                )
-                
-                fig_timeline = estilo_grafico(fig_timeline)
-                fig_timeline.update_layout(
-                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None),
-                    margin=dict(b=100)
-                )
-                st.plotly_chart(fig_timeline, use_container_width=True)
-                st.markdown("---")
-                
-                # =======================================================
                 # BARRAS CON ECHARTS (AGRUPADAS Y APILADAS)
                 # =======================================================
                 col_graf1, col_graf2 = st.columns(2)
