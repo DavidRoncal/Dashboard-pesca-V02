@@ -197,6 +197,7 @@ def conectar_google_sheets():
 # --- CARGA DE DATOS ---
 def cargar_datos():
     client = conectar_google_sheets()
+    # Asegúrate de que este nombre sea EXACTAMENTE el de tu nuevo archivo AppSheet
     sheet = client.open("Base de datos - Test").worksheet("Data")
     data = sheet.get_all_values()
     if not data: return pd.DataFrame()
@@ -284,7 +285,7 @@ try:
                 col5.metric("N° Coches", f"{total_coches_operacion:,.0f} 🛒")
                 
                 st.markdown("---")
-
+                
                 # =======================================================
                 # BARRAS CON ECHARTS (AGRUPADAS Y APILADAS)
                 # =======================================================
@@ -403,9 +404,8 @@ try:
                 st.subheader("📋 Tablas de Detalle Global")
                 
                 # --- TABLA 1: Resumen por Lote ---
-                # MODIFICADO: Columnas y lógica de N° Coches
+                # MODIFICADO: Columnas (sin Kg)
                 config_tablas_lote = {
-                    "Kg": st.column_config.NumberColumn(format="%.1f"), 
                     "Tn": st.column_config.NumberColumn(format="%.2f"), 
                     "Bandejas": st.column_config.NumberColumn(format="%.0f"),
                     "Lote": st.column_config.TextColumn("N° Lote"),
@@ -417,21 +417,19 @@ try:
                 resumen_lote = df_filtrado.groupby('Lote').agg({
                     'N° de Coche': 'nunique', # Contar únicos (Operación física)
                     'Bandejas': 'sum',
-                    'Kilos Calc': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
                 
                 # Renombrar para display
-                resumen_lote.columns = ['Lote', 'N° Coches', 'Bandejas', 'Kg', 'Tn']
-                # Reordenar
-                resumen_lote = resumen_lote[['Lote', 'N° Coches', 'Bandejas', 'Kg', 'Tn']]
+                resumen_lote.columns = ['Lote', 'N° Coches', 'Bandejas', 'Tn']
+                # Reordenar (sin Kg)
+                resumen_lote = resumen_lote[['Lote', 'N° Coches', 'Bandejas', 'Tn']]
                 
                 st.dataframe(resumen_lote, column_config=config_tablas_lote, hide_index=True, use_container_width=True)
 
                 # --- TABLA 2: Resumen por Cuadrilla ---
-                # MODIFICADO: Nombre de columna y cálculo por volumen
+                # MODIFICADO: Nombre de columna, cálculo por volumen y sin Kg
                 config_tablas_cuadrilla = {
-                    "Kg": st.column_config.NumberColumn(format="%.1f"), 
                     "Tn": st.column_config.NumberColumn(format="%.2f"), 
                     "Bandejas": st.column_config.NumberColumn(format="%.0f"),
                     "N° Coches completos": st.column_config.NumberColumn("N° Coches completos", format="%.2f"), 
@@ -440,16 +438,15 @@ try:
                 st.markdown("##### 👷 Resumen por Cuadrilla")
                 resumen_cuadrilla = df_filtrado.groupby('Cuadrilla').agg({
                     'Bandejas': 'sum',
-                    'Kilos Calc': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
                 
                 # Cálculo Volumen (Bandejas / 50)
                 resumen_cuadrilla['N° Coches completos'] = resumen_cuadrilla['Bandejas'] / 50
                 
-                # Renombrar y ordenar
-                resumen_cuadrilla.columns = ['Cuadrilla', 'Bandejas', 'Kg', 'Tn', 'N° Coches completos']
-                resumen_cuadrilla = resumen_cuadrilla[['Cuadrilla', 'N° Coches completos', 'Bandejas', 'Kg', 'Tn']]
+                # Renombrar y ordenar (sin Kg)
+                resumen_cuadrilla.columns = ['Cuadrilla', 'Bandejas', 'Tn', 'N° Coches completos']
+                resumen_cuadrilla = resumen_cuadrilla[['Cuadrilla', 'N° Coches completos', 'Bandejas', 'Tn']]
                 
                 st.dataframe(resumen_cuadrilla, column_config=config_tablas_cuadrilla, hide_index=True, use_container_width=True)
                 
@@ -650,4 +647,5 @@ try:
 
 except Exception as e:
     st.error(f"❌ Error: {e}")
+
 
