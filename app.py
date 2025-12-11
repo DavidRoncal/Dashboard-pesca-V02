@@ -144,7 +144,7 @@ st.markdown("""
     <hr style='border: 2px solid #004080; border-radius: 5px;'>
 """, unsafe_allow_html=True)
 
-# --- FUNCIÓN DE ESTILO DE GRÁFICOS (PLOTLY) ---
+# --- FUNCIÓN DE ESTILO DE GRÁFICOS (PLOTLY - MANTENIDA PARA HISTÓRICO) ---
 def estilo_grafico(fig):
     fig.update_layout(
         plot_bgcolor='white',
@@ -162,14 +162,13 @@ def estilo_grafico(fig):
             tickfont=dict(color='black', size=12, family="Arial", weight="bold"),
             gridcolor='#eeeeee'
         ),
-        # LEYENDA OPTIMIZADA
         legend=dict(
-            orientation="h",        # Horizontal
+            orientation="h",       
             yanchor="top",
-            y=-0.2,                 # Posición debajo del eje X
-            xanchor="left",         # Alineado a la izquierda
-            x=0,                    # Empieza desde el borde izquierdo
-            title=None,             # Sin título
+            y=-0.2,                
+            xanchor="left",        
+            x=0,                   
+            title=None,            
             font=dict(size=12, color='black', family="Arial"),
             bgcolor="rgba(255,255,255, 0.9)",
             bordercolor="rgba(0,0,0,0)", 
@@ -198,7 +197,6 @@ def conectar_google_sheets():
 # --- CARGA DE DATOS ---
 def cargar_datos():
     client = conectar_google_sheets()
-    # Asegúrate de que este nombre sea EXACTAMENTE el de tu nuevo archivo AppSheet
     sheet = client.open("Base de datos - Test").worksheet("Data")
     data = sheet.get_all_values()
     if not data: return pd.DataFrame()
@@ -212,7 +210,7 @@ try:
     if not df_raw.empty:
         # --- PROCESAMIENTO MEJORADO PARA APPSHEET ---
         
-        # 1. Manejo de FECHA para el filtro (Priorizamos la columna 'Fecha' si existe)
+        # 1. Manejo de FECHA
         if 'Fecha' in df_raw.columns:
             df_raw['Fecha_DT'] = pd.to_datetime(df_raw['Fecha'], dayfirst=True, errors='coerce')
             df_raw['Fecha_Filtro'] = df_raw['Fecha_DT'].dt.date
@@ -220,11 +218,9 @@ try:
             df_raw['Marca temporal'] = pd.to_datetime(df_raw['Marca temporal'], dayfirst=True, errors='coerce')
             df_raw['Fecha_Filtro'] = df_raw['Marca temporal'].dt.date
             
-        # 2. Manejo de TIEMPO para el gráfico (Marca temporal)
-        # Si AppSheet no llena 'Marca temporal', tratamos de reconstruirla con Fecha
+        # 2. Manejo de TIEMPO (Aunque quitamos el scatter, es bueno mantenerlo limpio)
         if 'Marca temporal' not in df_raw.columns or df_raw['Marca temporal'].isnull().all():
              if 'Fecha' in df_raw.columns:
-                 # Si no hay hora, asumimos hora 00:00 solo para que no falle el gráfico
                  df_raw['Marca temporal'] = pd.to_datetime(df_raw['Fecha'], dayfirst=True, errors='coerce')
         else:
              df_raw['Marca temporal'] = pd.to_datetime(df_raw['Marca temporal'], dayfirst=True, errors='coerce')
@@ -232,7 +228,6 @@ try:
         df_raw['Bandejas'] = pd.to_numeric(df_raw['Bandejas'], errors='coerce').fillna(0)
         df_raw['Lote'] = df_raw['Lote'].astype(str).str.strip()
         
-        # Validar columnas requeridas (Agregamos 'Fecha' a la validación por si acaso)
         columnas_requeridas = ['Calidad', 'Calibre', 'N° de Coche', 'Cuadrilla', 'Producto']
         for col in columnas_requeridas:
             if col not in df_raw.columns: df_raw[col] = "S/D"
@@ -280,9 +275,13 @@ try:
                 col3.metric("Lotes", f"{df_filtrado['Lote'].nunique()} 🏷️")
                 col4.metric("Cuadrillas", f"{df_filtrado['Cuadrilla'].nunique()} 👷")
                 
-                # MÉTRICA CÁLCULO POR VOLUMEN
-                coches_estimados = df_filtrado['Bandejas'].sum() / 50
-                col5.metric("N° Coches completos", f"{coches_estimados:,.2f} 🛒")
+                # MÉTRICA MODIFICADA: Conteo de únicos por lote sumados (Operaciones de Coche)
+                # 1. Agrupamos por Lote y contamos coches únicos en cada lote
+                coches_por_lote = df_filtrado.groupby('Lote')['N° de Coche'].nunique()
+                # 2. Sumamos esos conteos
+                total_coches_operacion = coches_por_lote.sum()
+                
+                col5.metric("N° Coches", f"{total_coches_operacion:,.0f} 🛒")
                 
                 st.markdown("---")
 
@@ -403,38 +402,56 @@ try:
                 # Tablas Detalle
                 st.subheader("📋 Tablas de Detalle Global")
                 
-                config_tablas = {
+                # --- TABLA 1: Resumen por Lote ---
+                # MODIFICADO: Columnas y lógica de N° Coches
+                config_tablas_lote = {
                     "Kg": st.column_config.NumberColumn(format="%.1f"), 
                     "Tn": st.column_config.NumberColumn(format="%.2f"), 
                     "Bandejas": st.column_config.NumberColumn(format="%.0f"),
                     "Lote": st.column_config.TextColumn("N° Lote"),
-                    "N° Coches": st.column_config.NumberColumn("N° Coches", format="%.2f"), 
+                    "N° Coches": st.column_config.NumberColumn("N° Coches", format="%d"), # Entero
                 }
                 
-                # --- TABLA 1: Resumen por Lote ---
                 st.markdown("##### 📦 Resumen por Lote")
+                # Agrupamos también por N° de Coche para contar únicos
                 resumen_lote = df_filtrado.groupby('Lote').agg({
+                    'N° de Coche': 'nunique', # Contar únicos (Operación física)
                     'Bandejas': 'sum',
                     'Kilos Calc': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
-                resumen_lote['N° Coches'] = resumen_lote['Bandejas'] / 50
-                resumen_lote = resumen_lote[['Lote', 'N° Coches', 'Bandejas', 'Kilos Calc', 'Toneladas Calc']]
+                
+                # Renombrar para display
                 resumen_lote.columns = ['Lote', 'N° Coches', 'Bandejas', 'Kg', 'Tn']
-                st.dataframe(resumen_lote, column_config=config_tablas, hide_index=True, use_container_width=True)
+                # Reordenar
+                resumen_lote = resumen_lote[['Lote', 'N° Coches', 'Bandejas', 'Kg', 'Tn']]
+                
+                st.dataframe(resumen_lote, column_config=config_tablas_lote, hide_index=True, use_container_width=True)
 
                 # --- TABLA 2: Resumen por Cuadrilla ---
+                # MODIFICADO: Nombre de columna y cálculo por volumen
+                config_tablas_cuadrilla = {
+                    "Kg": st.column_config.NumberColumn(format="%.1f"), 
+                    "Tn": st.column_config.NumberColumn(format="%.2f"), 
+                    "Bandejas": st.column_config.NumberColumn(format="%.0f"),
+                    "N° Coches completos": st.column_config.NumberColumn("N° Coches completos", format="%.2f"), 
+                }
+                
                 st.markdown("##### 👷 Resumen por Cuadrilla")
                 resumen_cuadrilla = df_filtrado.groupby('Cuadrilla').agg({
                     'Bandejas': 'sum',
                     'Kilos Calc': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
-                resumen_cuadrilla['N° Coches'] = resumen_cuadrilla['Bandejas'] / 50
-                resumen_cuadrilla = resumen_cuadrilla[['Cuadrilla', 'N° Coches', 'Bandejas', 'Kilos Calc', 'Toneladas Calc']]
-                resumen_cuadrilla.columns = ['Cuadrilla', 'N° Coches', 'Bandejas', 'Kg', 'Tn']
-                config_cuadrilla = config_tablas.copy(); config_cuadrilla.pop("Lote", None) 
-                st.dataframe(resumen_cuadrilla, column_config=config_cuadrilla, hide_index=True, use_container_width=True)
+                
+                # Cálculo Volumen (Bandejas / 50)
+                resumen_cuadrilla['N° Coches completos'] = resumen_cuadrilla['Bandejas'] / 50
+                
+                # Renombrar y ordenar
+                resumen_cuadrilla.columns = ['Cuadrilla', 'Bandejas', 'Kg', 'Tn', 'N° Coches completos']
+                resumen_cuadrilla = resumen_cuadrilla[['Cuadrilla', 'N° Coches completos', 'Bandejas', 'Kg', 'Tn']]
+                
+                st.dataframe(resumen_cuadrilla, column_config=config_tablas_cuadrilla, hide_index=True, use_container_width=True)
                 
                 st.markdown("---")
                 st.subheader("🧩 Detalle de Productos por Lote")
@@ -633,3 +650,4 @@ try:
 
 except Exception as e:
     st.error(f"❌ Error: {e}")
+
