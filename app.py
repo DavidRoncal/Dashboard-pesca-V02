@@ -144,7 +144,7 @@ st.markdown("""
     <hr style='border: 2px solid #004080; border-radius: 5px;'>
 """, unsafe_allow_html=True)
 
-# --- FUNCIÓN DE ESTILO DE GRÁFICOS (PLOTLY - MANTENIDA PARA HISTÓRICO) ---
+# --- FUNCIÓN DE ESTILO DE GRÁFICOS (PLOTLY) ---
 def estilo_grafico(fig):
     fig.update_layout(
         plot_bgcolor='white',
@@ -162,13 +162,14 @@ def estilo_grafico(fig):
             tickfont=dict(color='black', size=12, family="Arial", weight="bold"),
             gridcolor='#eeeeee'
         ),
+        # LEYENDA OPTIMIZADA
         legend=dict(
-            orientation="h",       
+            orientation="h",        # Horizontal
             yanchor="top",
-            y=-0.2,                
-            xanchor="left",        
-            x=0,                   
-            title=None,            
+            y=-0.2,                 # Posición debajo del eje X
+            xanchor="left",         # Alineado a la izquierda
+            x=0,                    # Empieza desde el borde izquierdo
+            title=None,             # Sin título
             font=dict(size=12, color='black', family="Arial"),
             bgcolor="rgba(255,255,255, 0.9)",
             bordercolor="rgba(0,0,0,0)", 
@@ -219,7 +220,7 @@ try:
             df_raw['Marca temporal'] = pd.to_datetime(df_raw['Marca temporal'], dayfirst=True, errors='coerce')
             df_raw['Fecha_Filtro'] = df_raw['Marca temporal'].dt.date
             
-        # 2. Manejo de TIEMPO (Aunque quitamos el scatter, es bueno mantenerlo limpio)
+        # 2. Manejo de TIEMPO
         if 'Marca temporal' not in df_raw.columns or df_raw['Marca temporal'].isnull().all():
              if 'Fecha' in df_raw.columns:
                  df_raw['Marca temporal'] = pd.to_datetime(df_raw['Fecha'], dayfirst=True, errors='coerce')
@@ -242,10 +243,20 @@ try:
         hoy_peru = datetime.now(zona_peru).date()
 
         # --- BARRA LATERAL ---
+        # === LOGO ESTÁTICO (Sin opción de agrandar) ===
+        # Usamos HTML markdown en lugar de st.image para evitar la funcionalidad de pantalla completa
+        logo_url = "https://github.com/DavidRoncal/Dashboard-pesca-V02/blob/main/Logo_small.png?raw=true"
+        st.sidebar.markdown(
+            f'<div style="text-align: center; margin-bottom: 20px;">'
+            f'<img src="{logo_url}" width="100%" style="border-radius: 5px;">'
+            f'</div>', 
+            unsafe_allow_html=True
+        )
+        
         st.sidebar.header("📅 Configuración")
         fecha_seleccionada = st.sidebar.date_input("Selecciona la Fecha (Diario)", hoy_peru)
         
-        st.sidebar.markdown("---")
+        #st.sidebar.markdown("---")
         st.sidebar.subheader("⚙️ Conversión")
         kilos_por_bandeja = st.sidebar.number_input("Kg promedio por Bandeja", min_value=0.1, value=10.0, step=0.5, format="%.1f")
         
@@ -276,10 +287,8 @@ try:
                 col3.metric("Lotes", f"{df_filtrado['Lote'].nunique()} 🏷️")
                 col4.metric("Cuadrillas", f"{df_filtrado['Cuadrilla'].nunique()} 👷")
                 
-                # MÉTRICA MODIFICADA: Conteo de únicos por lote sumados (Operaciones de Coche)
-                # 1. Agrupamos por Lote y contamos coches únicos en cada lote
+                # MÉTRICA: Conteo de únicos por lote sumados (Operaciones de Coche)
                 coches_por_lote = df_filtrado.groupby('Lote')['N° de Coche'].nunique()
-                # 2. Sumamos esos conteos
                 total_coches_operacion = coches_por_lote.sum()
                 
                 col5.metric("N° Coches", f"{total_coches_operacion:,.0f} 🛒")
@@ -404,31 +413,26 @@ try:
                 st.subheader("📋 Tablas de Detalle Global")
                 
                 # --- TABLA 1: Resumen por Lote ---
-                # MODIFICADO: Columnas (sin Kg)
                 config_tablas_lote = {
                     "Tn": st.column_config.NumberColumn(format="%.2f"), 
                     "Bandejas": st.column_config.NumberColumn(format="%.0f"),
                     "Lote": st.column_config.TextColumn("N° Lote"),
-                    "N° Coches": st.column_config.NumberColumn("N° Coches", format="%d"), # Entero
+                    "N° Coches": st.column_config.NumberColumn("N° Coches", format="%d"), 
                 }
                 
                 st.markdown("##### 📦 Resumen por Lote")
-                # Agrupamos también por N° de Coche para contar únicos
                 resumen_lote = df_filtrado.groupby('Lote').agg({
-                    'N° de Coche': 'nunique', # Contar únicos (Operación física)
+                    'N° de Coche': 'nunique', # Contar únicos
                     'Bandejas': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
                 
-                # Renombrar para display
                 resumen_lote.columns = ['Lote', 'N° Coches', 'Bandejas', 'Tn']
-                # Reordenar (sin Kg)
                 resumen_lote = resumen_lote[['Lote', 'N° Coches', 'Bandejas', 'Tn']]
                 
                 st.dataframe(resumen_lote, column_config=config_tablas_lote, hide_index=True, use_container_width=True)
 
                 # --- TABLA 2: Resumen por Cuadrilla ---
-                # MODIFICADO: Nombre de columna, cálculo por volumen y sin Kg
                 config_tablas_cuadrilla = {
                     "Tn": st.column_config.NumberColumn(format="%.2f"), 
                     "Bandejas": st.column_config.NumberColumn(format="%.0f"),
@@ -441,10 +445,7 @@ try:
                     'Toneladas Calc': 'sum'
                 }).reset_index()
                 
-                # Cálculo Volumen (Bandejas / 50)
                 resumen_cuadrilla['N° Coches completos'] = resumen_cuadrilla['Bandejas'] / 50
-                
-                # Renombrar y ordenar (sin Kg)
                 resumen_cuadrilla.columns = ['Cuadrilla', 'Bandejas', 'Tn', 'N° Coches completos']
                 resumen_cuadrilla = resumen_cuadrilla[['Cuadrilla', 'N° Coches completos', 'Bandejas', 'Tn']]
                 
@@ -647,5 +648,6 @@ try:
 
 except Exception as e:
     st.error(f"❌ Error: {e}")
+
 
 
