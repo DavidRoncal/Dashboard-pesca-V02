@@ -144,7 +144,7 @@ st.markdown("""
     <hr style='border: 2px solid #004080; border-radius: 5px;'>
 """, unsafe_allow_html=True)
 
-# --- FUNCIÓN DE ESTILO DE GRÁFICOS (PLOTLY) ---
+# --- FUNCIÓN DE ESTILO DE GRÁFICOS (PLOTLY - MANTENIDA PARA HISTÓRICO) ---
 def estilo_grafico(fig):
     fig.update_layout(
         plot_bgcolor='white',
@@ -209,7 +209,8 @@ try:
     df_raw = cargar_datos()
 
     if not df_raw.empty:
-        # --- PROCESAMIENTO ---
+        # --- PROCESAMIENTO MEJORADO PARA APPSHEET ---
+        
         # 1. Manejo de FECHA
         if 'Fecha' in df_raw.columns:
             df_raw['Fecha_DT'] = pd.to_datetime(df_raw['Fecha'], dayfirst=True, errors='coerce')
@@ -228,19 +229,22 @@ try:
         df_raw['Bandejas'] = pd.to_numeric(df_raw['Bandejas'], errors='coerce').fillna(0)
         df_raw['Lote'] = df_raw['Lote'].astype(str).str.strip()
         
-        columnas_requeridas = ['Calidad', 'Calibre', 'N° de Coche', 'Cuadrilla', 'Producto']
+        # Validar columnas requeridas (Agregamos 'SKU' a la validación por seguridad)
+        columnas_requeridas = ['Calidad', 'Calibre', 'N° de Coche', 'Cuadrilla', 'Producto', 'SKU']
         for col in columnas_requeridas:
             if col not in df_raw.columns: df_raw[col] = "S/D"
         
         df_raw['Calidad'] = df_raw['Calidad'].astype(str)
         df_raw['Calibre'] = df_raw['Calibre'].astype(str)
         df_raw['N° de Coche'] = df_raw['N° de Coche'].astype(str).str.strip()
+        df_raw['SKU'] = df_raw['SKU'].astype(str).str.strip()
 
         # --- FECHA PERÚ ---
         zona_peru = pytz.timezone('America/Lima')
         hoy_peru = datetime.now(zona_peru).date()
 
         # --- BARRA LATERAL ---
+        # === LOGO ESTÁTICO (Sin opción de agrandar) ===
         logo_url = "https://github.com/DavidRoncal/Dashboard-pesca-V02/blob/main/Logo_small.png?raw=true"
         st.sidebar.markdown(
             f'<div style="text-align: center; margin-bottom: 20px;">'
@@ -297,12 +301,14 @@ try:
                 
                 with col_graf1:
                     st.subheader("🏭 Toneladas por Cuadrilla")
+                    # Pivotamos
                     df_cuadrilla_prod = df_filtrado.groupby(['Cuadrilla', 'Producto'])['Toneladas Calc'].sum().reset_index()
                     df_piv_cuadrilla = df_cuadrilla_prod.pivot(index='Cuadrilla', columns='Producto', values='Toneladas Calc').fillna(0)
                     
                     x_axis_cuadrilla = df_piv_cuadrilla.index.tolist()
                     products_cuadrilla = df_piv_cuadrilla.columns.tolist()
                     
+                    # Creamos series APILADAS (stack: 'total')
                     series_cuadrilla = []
                     for product in products_cuadrilla:
                         raw_data = df_piv_cuadrilla[product].round(1).tolist()
@@ -349,6 +355,7 @@ try:
                     
                 with col_graf2:
                     st.subheader("📦 Toneladas por Lote")
+                    # Pivotamos
                     df_lote_prod = df_filtrado.groupby(['Lote', 'Producto'])['Toneladas Calc'].sum().reset_index()
                     df_piv_lote = df_lote_prod.pivot(index='Lote', columns='Producto', values='Toneladas Calc').fillna(0)
                     
@@ -415,7 +422,7 @@ try:
                 st.markdown("##### 📦 Resumen por Lote")
                 # Agrupamos también por N° de Coche para contar únicos
                 resumen_lote = df_filtrado.groupby('Lote').agg({
-                    'N° de Coche': 'nunique', # Contar únicos (Operación física)
+                    'N° de Coche': 'nunique', # Contar únicos
                     'Bandejas': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
@@ -425,7 +432,7 @@ try:
                 
                 st.dataframe(resumen_lote, column_config=config_tablas_lote, hide_index=True, use_container_width=True)
 
-                # --- TABLA 2: Resumen por Cuadrilla ---
+                # --- TABLA 2: Resumen por Cuadrilla (ACTUALIZADA) ---
                 config_tablas_cuadrilla = {
                     "Tn": st.column_config.NumberColumn(format="%.2f"), 
                     "Bandejas": st.column_config.NumberColumn(format="%.0f"),
@@ -433,39 +440,54 @@ try:
                 }
                 
                 st.markdown("##### 👷 Resumen por Cuadrilla")
-                # Paso 1: Agrupar por Cuadrilla y Lote para contar coches únicos por lote (Operaciones)
+                # Lógica: Contar coches únicos por lote y sumarlos por cuadrilla
+                
+                # 1. Contar operaciones únicas (Cuadrilla + Lote + Coche)
                 ops_por_cuadrilla = df_filtrado.groupby(['Cuadrilla', 'Lote'])['N° de Coche'].nunique().reset_index(name='Count')
-                # Paso 2: Sumar los conteos por Cuadrilla
+                
+                # 2. Sumar el total de coches por cuadrilla
                 total_coches_cuadrilla = ops_por_cuadrilla.groupby('Cuadrilla')['Count'].sum().reset_index(name='N° Coches')
                 
-                # Paso 3: Agrupar el resto de métricas
+                # 3. Agrupar el resto de métricas
                 resumen_cuadrilla = df_filtrado.groupby('Cuadrilla').agg({
                     'Bandejas': 'sum',
                     'Toneladas Calc': 'sum'
                 }).reset_index()
                 
-                # Paso 4: Unir (Merge) la cuenta de coches
+                # 4. Unir (Merge)
                 resumen_cuadrilla = pd.merge(resumen_cuadrilla, total_coches_cuadrilla, on='Cuadrilla', how='left')
                 resumen_cuadrilla['N° Coches'] = resumen_cuadrilla['N° Coches'].fillna(0).astype(int)
                 
-                # Renombrar y ordenar (sin Kg)
+                # Renombrar y ordenar
                 resumen_cuadrilla.columns = ['Cuadrilla', 'Bandejas', 'Tn', 'N° Coches']
                 resumen_cuadrilla = resumen_cuadrilla[['Cuadrilla', 'N° Coches', 'Bandejas', 'Tn']]
                 
                 st.dataframe(resumen_cuadrilla, column_config=config_tablas_cuadrilla, hide_index=True, use_container_width=True)
                 
                 st.markdown("---")
+                
+                # =======================================================
+                # DETALLE PRODUCTOS POR LOTE (ACTUALIZADO CON SKU)
+                # =======================================================
                 st.subheader("🧩 Detalle de Productos por Lote")
                 lotes_unicos = sorted(df_filtrado['Lote'].unique())
                 if len(lotes_unicos) > 0:
                     for lote_actual in lotes_unicos:
                         st.markdown(f"#### 🏷️ Lote: {lote_actual}")
                         df_lote_especifico = df_filtrado[df_filtrado['Lote'] == lote_actual]
-                        tabla_detalle = df_lote_especifico.groupby(['Producto', 'Calidad', 'Calibre'])[['Toneladas Calc']].sum().reset_index()
-                        tabla_detalle.columns = ['Producto', 'Calidad', 'Calibre', 'Toneladas']
+                        
+                        # MODIFICACIÓN: Agregado SKU al groupby
+                        tabla_detalle = df_lote_especifico.groupby(['Producto', 'Calidad', 'Calibre', 'SKU'])[['Toneladas Calc']].sum().reset_index()
+                        
+                        # MODIFICACIÓN: Renombrado Toneladas -> Tn y ordenado
+                        tabla_detalle.columns = ['Producto', 'Calidad', 'Calibre', 'SKU', 'Tn']
+                        tabla_detalle = tabla_detalle[['Producto', 'Calidad', 'Calibre', 'SKU', 'Tn']]
+                        
                         st.dataframe(
-                            tabla_detalle, column_config={"Toneladas": st.column_config.NumberColumn(format="%.2f t")},
-                            hide_index=True, use_container_width=True
+                            tabla_detalle, 
+                            column_config={"Tn": st.column_config.NumberColumn(format="%.2f t")},
+                            hide_index=True, 
+                            use_container_width=True
                         )
                         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -651,6 +673,7 @@ try:
 
 except Exception as e:
     st.error(f"❌ Error: {e}")
+
 
 
 
